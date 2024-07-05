@@ -2,15 +2,15 @@ const { ethers } = require('hardhat');
 
 async function main() {
   const Contract = await ethers.getContractFactory("World");
-  const deployedContract = await Contract.attach('0x63e1e906f734b97002d4dbc05f60d6a34f1f4f74');
+  const deployedContract = await Contract.attach('0x03771ad7ee7c6aa5298698a3ae8fb9e8af72758c');
 
-  const account = "0x9eae0b75faf48767067e29b2737de766466f7dbb";
-  const registry = "0x3dc90dd6a45866a9876edf3d04cc591f569efb07";
-  const banking = "0x03b27ca68ffe9c5cc667d3b75d046a3d85dac35e";
-  const item = "0xec1a72219a0879041c4b311b48e58b7015a22f11";
-  const token = "0x28296b5a57e2f16e47fafb9a86718e69bf826fb8";
-  const profile = "0x030609a73fbb073fccb90e6262d7c3b9d733dac4";
-  const craft = "0x0885577dc804ed638237ee1020b0a6b67bcba92d";
+  const account = "0x0fe1a48a9b8de6646e38b7e2a14d135f53c88c9e";
+  const registry = "0x13d3766a1e5325c12b93850f7364d4449d4eb4d8";
+  const banking = "0xe8d309dca98bfd96b0ec98ffc831edc94131368f";
+  const item = "0x82c5c4c2a453262bdc80ed630f681a7054997db2";
+  const token = "0xb86c5077d067210b6289d7885294c636d41f7b1e";
+  const profile = "0x083702e73c7266f5976939d5541e3392096ed5ff";
+  const craft = "0xfed07120164edd6477670726ac35328da4123f68";
   const chainId = 252;
 
   const tx = await deployedContract.setProfile(profile);

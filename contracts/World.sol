@@ -136,13 +136,13 @@ contract World is Raffle, Ownable, ReentrancyGuard {
     function createPlayer(uint256 _tokenId) external onlyUser onlyTokenOwner(_tokenId) {
         address tokenBoundAccount = _getTokenBoundAccount(_tokenId);
         // require(players[tokenBoundAccount].tokenId > 0, "Player already registered");
-        players[tokenBoundAccount] = Player(_tokenId, 0, 0, 0, 0, 0, 0);
+        players[_msgSender()] = Player(_tokenId, 0, 0, 0, 0, 0, 0);
         emit PlayerCreated(_tokenId, tokenBoundAccount, block.timestamp);
     }
 
     function getPlayer(uint256 _tokenId) external view returns (Player memory) {
         address tokenBoundAccount = _getTokenBoundAccount(_tokenId);
-        return players[tokenBoundAccount];
+        return players[_msgSender()];
     }
     // Player functions
 
@@ -160,14 +160,14 @@ contract World is Raffle, Ownable, ReentrancyGuard {
         uint256 price = _getItemPrice(_itemId);
 
         if(exchangeType == ExchangeType.BUY) {
-            require(Token(FRAX).balanceOf(tokenBoundAccount) >= price, "FRAX Token is not enough to buy item");
+            require(Token(FRAX).balanceOf(_msgSender()) >= price, "FRAX Token is not enough to buy item");
             Token(FRAX).approve(address(this), price);
-            Token(FRAX).transferFrom(tokenBoundAccount, address(this), price);
+            Token(FRAX).transferFrom(_msgSender(), address(this), price);
             Item(item).mint(tokenBoundAccount, _itemId, 1);
         } else {
-            require(Item(item).balanceOf(tokenBoundAccount, _itemId) > 0, "Item Token is not enough to sell item");
-            Item(item).safeTransferFrom(tokenBoundAccount, address(this), _itemId, 1, "");
-            Token(FRAX).transfer(tokenBoundAccount, (price * (100 - marketfees)) / 100);
+            require(Item(item).balanceOf(_msgSender(), _itemId) > 0, "Item Token is not enough to sell item");
+            Item(item).safeTransferFrom(_msgSender(), address(this), _itemId, 1, "");
+            Token(FRAX).transfer(_msgSender(), (price * (100 - marketfees)) / 100);
         }
         // TODO: change CUBE token to FRAX and reduce pricing
         // TODO: Normal PICKAXE = 0.01 FRAX(BUY) for sell reduce 20% from PRICE
@@ -203,12 +203,12 @@ contract World is Raffle, Ownable, ReentrancyGuard {
     }
 
     function doDeposit(uint256 _tokenId, uint256 _amount) external onlyUser onlyTokenOwner(_tokenId) {
-        address tokenBoundAccount = _getTokenBoundAccount(_tokenId);
-        require(Token(FRAX).balanceOf(tokenBoundAccount) > 0, "FRAX Balance <= 0");
-        (bool success, ) = Banking(banking).deposit(_amount, tokenBoundAccount);
+        // address tokenBoundAccount = _getTokenBoundAccount(_tokenId);
+        require(Token(FRAX).balanceOf(_msgSender()) > 0, "FRAX Balance <= 0");
+        (bool success, ) = Banking(banking).deposit(_amount, _msgSender());
 
         if(success) {
-            players[tokenBoundAccount].ticket += 1;
+            players[_msgSender()].ticket += 1;
         }
     }
 
@@ -218,8 +218,8 @@ contract World is Raffle, Ownable, ReentrancyGuard {
     }
 
     function _dailyCheckIn(uint256 _tokenId, uint256 _reward) internal {
-        address tokenBoundAccount = _getTokenBoundAccount(_tokenId);
-        Player storage userCheckInInfo = players[tokenBoundAccount];
+        // address tokenBoundAccount = _getTokenBoundAccount(_tokenId);
+        Player storage userCheckInInfo = players[_msgSender()];
         require(block.timestamp >= userCheckInInfo.lastCheckIn + CHECK_IN_WINDOW, "Too early for next check-in");
 
         if (block.timestamp > userCheckInInfo.lastCheckIn + (CHECK_IN_WINDOW * 2)) {
@@ -238,9 +238,9 @@ contract World is Raffle, Ownable, ReentrancyGuard {
 
     function _dailyPlayMinigame(uint256 _tokenId, uint256 _reward, uint256 _guess) internal {
         address tokenBoundAccount = _getTokenBoundAccount(_tokenId);
-        require(players[tokenBoundAccount].ticket > 0 , "No ticket is avaliabe");
+        require(players[_msgSender()].ticket > 0 , "No ticket is avaliabe");
         uint256 r = _enterRaffle();
-        players[tokenBoundAccount].ticket = players[tokenBoundAccount].ticket - 1;
+        players[_msgSender()].ticket = players[_msgSender()].ticket - 1;
         if(r == _guess) {
             _distributeRewardandScore(_tokenId, _reward);
             emit RaffleResulted(msg.sender, block.timestamp, true);
@@ -257,7 +257,7 @@ contract World is Raffle, Ownable, ReentrancyGuard {
 
     function checkCurrentQuestStatus(uint256 _tokenId) public view returns (bool isCheckIn, bool isPlayMinigame, bool lastDoCraft) {
         address tokenBoundAccount = _getTokenBoundAccount(_tokenId);
-        Player storage userCheckInInfo = players[tokenBoundAccount];
+        Player storage userCheckInInfo = players[_msgSender()];
         isCheckIn = false;
         isPlayMinigame = false;
         lastDoCraft = false;
