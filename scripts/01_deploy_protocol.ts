@@ -9,7 +9,6 @@ async function main() {
   const token = await hre.viem.deployContract("Token", [owner, world.address, profile.address]);
   const craft = await hre.viem.deployContract("CraftSystem", [owner, world.address]);
   const item = await hre.viem.deployContract("Item", [owner, world.address, craft.address, ""]);
-  const banking = await hre.viem.deployContract("Banking", [owner, world.address]);
   const erc6551Account  = await hre.viem.deployContract("ERC6551Account");
   const erc6551Registry = await hre.viem.deployContract("ERC6551Registry");
 
@@ -21,9 +20,6 @@ async function main() {
   console.log(
     `registry address: ${erc6551Registry.address}`
   );
-  console.log(
-    `banking address: ${banking.address}`
-  )
   console.log(
     `item address: ${item.address}`
   );

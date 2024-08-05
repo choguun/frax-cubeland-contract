@@ -1,7 +1,7 @@
 
 async function main4() {
   const Contract = await ethers.getContractFactory("World");
-  const deployedContract = await Contract.attach('0x03771ad7ee7c6aa5298698a3ae8fb9e8af72758c');
+  const deployedContract = await Contract.attach('0xa3baa4472eacf445518ce7e6ec3aff5d471d0ca1');
 
   // addItem
   const tx4 = await deployedContract.addItems(0, 0);

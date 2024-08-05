@@ -1,32 +1,30 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.24;
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
+import {Token} from "./Token.sol";
 
-contract Banking is Ownable {
-    address public world;
-    address public sFRAXVault = 0xBFc4D34Db83553725eC6c768da71D2D9c1456B55;
+contract Banking {
+    address public constant FRAX = 0xFc00000000000000000000000000000000000001;
+    address public constant sFRAX = 0xfc00000000000000000000000000000000000008;
+    address public constant sFRAXVault = 0xBFc4D34Db83553725eC6c768da71D2D9c1456B55;
 
-    modifier onlyWorld() {
-        require(_msgSender() == world, "Only world can call this function");
-        _;
+    function _depositFraxVault(uint256 _amount, address _reciever) internal returns (bool, uint256) {
+        uint256 share = IERC4626(sFRAXVault).deposit(_amount, _reciever);
+
+        if(share > 0)
+            return (true, share);
+        else
+            return (false, 0);
     }
 
-    constructor(address _initialOwner, address _world) Ownable(_initialOwner) {
-        world = _world;
-    }
+    function _redeemFraxVault(uint256 _amount, address _reciever) public returns (bool, uint256) {
+        uint256 share = IERC4626(sFRAXVault).redeem(_amount, _reciever, _reciever);
 
-    function deposit(uint256 _amount, address _reciever) public onlyWorld returns (bool, uint256) {
-        IERC4626(sFRAXVault).deposit(_amount, _reciever);
-
-        return (true, 0);
-    }
-
-    function redeem(uint256 _amount, address _reciever) public onlyWorld returns (bool, uint256) {
-        IERC4626(sFRAXVault).redeem(_amount, _reciever, _reciever);
-
-        return (true, 0);
+        if(share > 0)
+            return (true, share);
+        else
+            return (false, 0);
     }
     // TODO: integrate with sFRAX Vault call deposit FRAX token to recieve sFRAX token
     // TODO: sFRAX token will store in World contract and Banking contract will mapping address and FRAX deposit amount

@@ -10,8 +10,9 @@ import {Raffle} from "./Raffle.sol";
 import {CraftSystem} from "./CraftSystem.sol";
 import {Banking} from "./Banking.sol";
 import {ERC6551Registry} from "./ERC6551Registry.sol";
+import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 
-contract World is Raffle, Ownable, ReentrancyGuard {
+contract World is Raffle, Banking, Ownable, ReentrancyGuard {
     // Data Structures
     enum QuestType {
         DAILY_CHECK_IN,
@@ -53,12 +54,12 @@ contract World is Raffle, Ownable, ReentrancyGuard {
     address public craft; // Craft System
     address public registry; // Registry
     address public account; // Token Bound Account
-    address public banking; // Banking
+    // address public banking; // Banking
     uint256 public chainId;
     // External Contract
 
     // Game data
-    mapping(address => Player) private players;
+    mapping(address => Player) public players;
     mapping(uint256 => Quest) public quests;
     mapping(uint256 => GameItem) public gameItems;
 
@@ -68,7 +69,8 @@ contract World is Raffle, Ownable, ReentrancyGuard {
 
     uint256 public constant CHECK_IN_WINDOW = 24 hours;
     uint256 public constant DENOMINATOR = 10 ** 16; // FRAX 10 ** 18 // 1 = 0.01 
-    address public constant FRAX = 0xFc00000000000000000000000000000000000001;
+    // address public constant FRAX = 0xFc00000000000000000000000000000000000001;
+    // address public constant sFRAXVault = 0xBFc4D34Db83553725eC6c768da71D2D9c1456B55;
     // Game data
 
     // Events
@@ -134,15 +136,12 @@ contract World is Raffle, Ownable, ReentrancyGuard {
     // Player functions
     // TODO: call createPlayer after register token bound account
     function createPlayer(uint256 _tokenId) external onlyUser onlyTokenOwner(_tokenId) {
-        address tokenBoundAccount = _getTokenBoundAccount(_tokenId);
-        // require(players[tokenBoundAccount].tokenId > 0, "Player already registered");
         players[_msgSender()] = Player(_tokenId, 0, 0, 0, 0, 0, 0);
-        emit PlayerCreated(_tokenId, tokenBoundAccount, block.timestamp);
+        emit PlayerCreated(_tokenId, _msgSender(), block.timestamp);
     }
 
-    function getPlayer(uint256 _tokenId) external view returns (Player memory) {
-        address tokenBoundAccount = _getTokenBoundAccount(_tokenId);
-        return players[_msgSender()];
+    function getPlayer(address _player) external view returns (Player memory) {
+        return players[_player];
     }
     // Player functions
 
@@ -165,8 +164,8 @@ contract World is Raffle, Ownable, ReentrancyGuard {
             Token(FRAX).transferFrom(_msgSender(), address(this), price);
             Item(item).mint(tokenBoundAccount, _itemId, 1);
         } else {
-            require(Item(item).balanceOf(_msgSender(), _itemId) > 0, "Item Token is not enough to sell item");
-            Item(item).safeTransferFrom(_msgSender(), address(this), _itemId, 1, "");
+            require(Item(item).balanceOf(tokenBoundAccount, _itemId) > 0, "Item Token is not enough to sell item");
+            Item(item).burn(_msgSender(), _itemId, 1);
             Token(FRAX).transfer(_msgSender(), (price * (100 - marketfees)) / 100);
         }
         // TODO: change CUBE token to FRAX and reduce pricing
@@ -202,19 +201,47 @@ contract World is Raffle, Ownable, ReentrancyGuard {
         }
     }
 
+    // FRAX Integration
     function doDeposit(uint256 _tokenId, uint256 _amount) external onlyUser onlyTokenOwner(_tokenId) {
         // address tokenBoundAccount = _getTokenBoundAccount(_tokenId);
-        require(Token(FRAX).balanceOf(_msgSender()) > 0, "FRAX Balance <= 0");
-        (bool success, ) = Banking(banking).deposit(_amount, _msgSender());
-
-        if(success) {
+        uint256 balance = Token(FRAX).balanceOf(_msgSender());
+        require(balance > 0, "FRAX Balance <= 0");
+        require(_amount > 0, "Amount must be greater than 0");
+        require(_amount <= balance, "Amount must not be greater than balance");
+        require(Token(FRAX).transferFrom(_msgSender(), address(this), _amount), "Transfer failed");
+        require(Token(FRAX).approve(sFRAXVault, _amount), "Approve failed");
+        (bool success, uint256 share) = _depositFraxVault(_amount, _msgSender());
+        // TODO: improve sFRAX store in world contract instead and mapping player address and sFRAX amount
+        
+        if(share > 0) {
             players[_msgSender()].ticket += 1;
         }
     }
 
+    function doRedeem(uint256 _tokenId, uint256 _amount) external onlyUser onlyTokenOwner(_tokenId) {
+        // address tokenBoundAccount = _getTokenBoundAccount(_tokenId);
+        uint256 balance = Token(sFRAX).balanceOf(_msgSender());
+        require(balance > 0, "sFRAX Balance <= 0");
+        require(_amount > 0, "Amount must be greater than 0");
+        require(_amount <= balance, "Amount must not be greater than balance");
+        require(Token(sFRAX).transferFrom(_msgSender(), address(this), _amount), "Transfer failed");
+        require(Token(sFRAX).approve(sFRAXVault, _amount), "Approve failed");
+        (bool success, uint256 share) = _redeemFraxVault(_amount, _msgSender());
+        
+        if(share > 0) {
+            _distributeRewardandScore(_tokenId, 20);
+        }
+    }
+
+    // TODO: swap feature in game integrate with FRAX Swap router
+    function doSwap(uint256 _tokenId) external onlyUser onlyTokenOwner(_tokenId) {
+
+    }
+    // FRAX Integration
+
     function _distributeRewardandScore(uint256 _tokenId, uint256 _reward) internal {
-        address tokenBoundAccount = _getTokenBoundAccount(_tokenId);
-        Token(token).mint(tokenBoundAccount, _reward * DENOMINATOR * 100);
+        // address tokenBoundAccount = _getTokenBoundAccount(_tokenId);
+        Token(token).mint(_msgSender(), _reward * DENOMINATOR * 100);
     }
 
     function _dailyCheckIn(uint256 _tokenId, uint256 _reward) internal {
@@ -233,17 +260,21 @@ contract World is Raffle, Ownable, ReentrancyGuard {
         _distributeRewardandScore(_tokenId, _reward);
 
         userCheckInInfo.lastCheckIn = block.timestamp;
-        emit CheckedIn(msg.sender, block.timestamp, userCheckInInfo.streak);
+        emit CheckedIn(_msgSender(), block.timestamp, userCheckInInfo.streak);
     }
 
     function _dailyPlayMinigame(uint256 _tokenId, uint256 _reward, uint256 _guess) internal {
-        address tokenBoundAccount = _getTokenBoundAccount(_tokenId);
         require(players[_msgSender()].ticket > 0 , "No ticket is avaliabe");
         uint256 r = _enterRaffle();
         players[_msgSender()].ticket = players[_msgSender()].ticket - 1;
+       // TODO: deposit in vault to raffle ticket
+       // TODO: 100 $CUBE = 1 ticket
+       // TODO: doeposit CUBE will be prize pool
         if(r == _guess) {
             _distributeRewardandScore(_tokenId, _reward);
-            emit RaffleResulted(msg.sender, block.timestamp, true);
+            emit RaffleResulted(_msgSender(), block.timestamp, true);
+        } else {
+            emit RaffleResulted(_msgSender(), block.timestamp, false);
         }
     }
 
@@ -308,9 +339,9 @@ contract World is Raffle, Ownable, ReentrancyGuard {
         craft = _craft;
     }
 
-    function setBanking(address _banking) public onlyOwner {
-        banking = _banking;
-    }
+    // function setBanking(address _banking) public onlyOwner {
+    //     banking = _banking;
+    // }
 
     function configTokenBound(address _registry, address _account, uint256 _chainId) public onlyOwner {
         registry = _registry;
